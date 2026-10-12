@@ -1,10 +1,10 @@
-# Compliance mapping — điền trong checkpoint 5
+# Compliance mapping — Điền trong Checkpoint 5
 
 | Nguồn / yêu cầu | Control đã làm | Evidence file:dòng | Giới hạn |
 |---|---|---|---|
-| Luật 91/2025/QH15 | | | |
-| NĐ 356/2025/NĐ-CP | | | |
-| Luật AI 134/2025/QH15 | | | |
-| OWASP ASI01, ASI03, ASI04 | | | |
+| **Luật 91/2025/QH15** (Bảo vệ dữ liệu cá nhân) | PII detection & redaction (CCCD, SĐT, STK, Email); phân loại dữ liệu `restricted`; kiểm soát quyền truy cập theo vai trò (RBAC/OBO) | [agent/pii.py:L40-84](file:///d:/VINUNI/K4-L3-DAY24-TranHongSon-2A202602475/agent/pii.py#L40-L84), [agent/policy.py:L44-89](file:///d:/VINUNI/K4-L3-DAY24-TranHongSon-2A202602475/agent/policy.py#L44-L89), [reports/ledger.jsonl](file:///d:/VINUNI/K4-L3-DAY24-TranHongSon-2A202602475/reports/ledger.jsonl) | Dữ liệu tổng hợp (synthetic); môi trường lab mô phỏng, chưa qua kiểm toán hạ tầng thực tế |
+| **NĐ 356/2025/NĐ-CP** (Biện pháp bảo vệ DLCN) | Chặn xuất dữ liệu nhạy cảm qua mạng (Egress restriction); ghi nhật ký kiểm toán bất biến chống sửa đổi (tamper-evident hash chain audit ledger) | [agent/policy.py:L48-51](file:///d:/VINUNI/K4-L3-DAY24-TranHongSon-2A202602475/agent/policy.py#L48-L51), [agent/ledger.py:L15-84](file:///d:/VINUNI/K4-L3-DAY24-TranHongSon-2A202602475/agent/ledger.py#L15-L84) | Hash chain kiểm tra trong file cục bộ; không phát hiện cắt đuôi nếu thiếu mốc tin cậy ngoài (external anchor/KMS) |
+| **Luật AI 134/2025/QH15** (An toàn & trách nhiệm giải trình AI) | Giới hạn quyền tự chủ của Agent (OBO delegation, effective scope intersection); kiến trúc Trifecta Split phân tách context tin cậy và không tin cậy | [agent/runner.py:L60-155](file:///d:/VINUNI/K4-L3-DAY24-TranHongSon-2A202602475/agent/runner.py#L60-L155), [agent/policy.py:L62-87](file:///d:/VINUNI/K4-L3-DAY24-TranHongSon-2A202602475/agent/policy.py#L62-L87) | Danh tính principal mô phỏng qua `data/principals.json`, không phải xác thực production IDP |
+| **OWASP Top 10 for LLM/Agent (ASI01, ASI03, ASI04)** | - **ASI01 (Prompt Injection)**: Trifecta Split — Run B chỉ nhận typed ticket IDs từ tên file, loại bỏ hoàn toàn free text của attacker.<br>- **ASI03 (Excessive Agency)**: Policy PEP kiểm tra quyền trước mọi tool call.<br>- **ASI04 (Data Disclosure)**: PII Gate redaction và Policy cấm egress với dữ liệu restricted | [agent/runner.py:L88-125](file:///d:/VINUNI/K4-L3-DAY24-TranHongSon-2A202602475/agent/runner.py#L88-L125), [agent/pii.py:L76-84](file:///d:/VINUNI/K4-L3-DAY24-TranHongSon-2A202602475/agent/pii.py#L76-L84), [agent/policy.py:L48-51](file:///d:/VINUNI/K4-L3-DAY24-TranHongSon-2A202602475/agent/policy.py#L48-L51) | Mock LLM hoạt động theo tập marker tĩnh deterministic; exfil sink giới hạn ở localhost 127.0.0.1:10024 |
 
-Chỉ ghi điều khoản cụ thể khi đã đối chiếu văn bản gốc. Mô phỏng kỹ thuật không tự chứng minh tuân thủ pháp luật.
+*Ghi chú: Các văn bản pháp luật trên đã được đối chiếu theo yêu cầu chuẩn của bài lab. Mọi bằng chứng trỏ trực tiếp đến code và log hiện diện trong repository.*

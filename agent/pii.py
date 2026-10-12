@@ -1,39 +1,84 @@
-"""BƯỚC 3a — PII gate TRƯỚC KHI vào context/store (12').
+"""BƯỚC 3a — PII gate TRƯỚC KHI vào context/store.
 
-Đọc CHECKPOINTS.md (§3a) trước khi bắt đầu: Presidio không có tiếng Việt
-sẵn (AnalyzerEngine() mặc định chỉ hỗ trợ "en"). Đường an toàn cho 2h là
-regex recognizer + deny-list cho PERSON — coi spaCy/transformers NER là
-stretch goal, KHÔNG bắt buộc.
-
-Interface bắt buộc (tests/test_pii.py gọi trực tiếp 2 hàm này):
-
+Interface:
     detect(text: str) -> list[dict]
-        Mỗi entity: {"type": str, "start": int, "end": int}
-        `type` là một trong: "VN_CCCD", "VN_PHONE", "VN_BANK_ACCOUNT", "EMAIL"
-        `start`/`end` là offset ký tự trong `text` (offset đầu bao gồm,
-        offset cuối KHÔNG bao gồm — giống slice Python text[start:end]).
-        Format này khớp với tests/vn_pii_testset.jsonl.
-
     redact(text: str) -> str
-        Trả về `text` sau khi mọi entity từ detect() bị thay bằng
-        "[REDACTED_<TYPE>]". Phải xử lý overlap/thứ tự đúng khi có nhiều
-        entity (gợi ý: thay từ cuối văn bản về đầu để offset không bị lệch).
-
-Gợi ý định dạng (không bắt buộc đúng regex này, miễn đạt ngưỡng trên test
-set ở tests/vn_pii_testset.jsonl):
-    VN_CCCD          12 chữ số liên tiếp
-    VN_PHONE         0 + 9-10 chữ số, có thể có dấu cách/gạch ngang
-    VN_BANK_ACCOUNT  8-16 chữ số liên tiếp, thường đi kèm "STK"/"số tài khoản"
-    EMAIL            dạng chuẩn local@domain.tld
-
-Đo bằng: pytest tests/test_pii.py -v -s   (in ra precision/recall)
 """
 from __future__ import annotations
 
+import re
+
+# Regex patterns
+_EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+_BANK_RE = re.compile(r"(?i)(?:STK|số tài khoản|so tai khoan)\s*[:\s]?\s*(\d{8,20})")
+_CCCD_CONTEXT_RE = re.compile(r"(?i)(?:CCCD|căn cước|can cuoc)\s*(?:của\s+[^:\n]+?:\s*|[:\s]\s*)?(\d{12})\b")
+_CCCD_RAW_RE = re.compile(r"\b\d{12}\b")
+_PHONE_CONTEXT_RE = re.compile(r"(?i)(?:SĐT|SDT|số điện thoại|so dien thoai|là|la)\s*[:\s]?\s*(0\d{9})\b")
+_PHONE_RAW_RE = re.compile(r"\b0\d{9}\b")
+
+
+def _is_overlapping(span: tuple[int, int], existing_spans: list[tuple[int, int]]) -> bool:
+    start, end = span
+    for ex_start, ex_end in existing_spans:
+        if start < ex_end and ex_start < end:
+            return True
+    return False
+
 
 def detect(text: str) -> list[dict]:
-    raise NotImplementedError("BƯỚC 3a: implement PII detection")
+    """Phát hiện các thực thể PII (CCCD, PHONE, BANK_ACCOUNT, EMAIL)."""
+    entities: list[dict] = []
+    occupied_spans: list[tuple[int, int]] = []
+
+    # 1. EMAIL
+    for m in _EMAIL_RE.finditer(text):
+        span = m.span()
+        if not _is_overlapping(span, occupied_spans):
+            occupied_spans.append(span)
+            entities.append({"type": "EMAIL", "start": span[0], "end": span[1]})
+
+    # 2. VN_BANK_ACCOUNT (thường có tiền tố STK/số tài khoản)
+    for m in _BANK_RE.finditer(text):
+        span = m.span(1)
+        if not _is_overlapping(span, occupied_spans):
+            occupied_spans.append(span)
+            entities.append({"type": "VN_BANK_ACCOUNT", "start": span[0], "end": span[1]})
+
+    # 3. VN_CCCD (có ngữ cảnh CCCD hoặc chuỗi 12 chữ số)
+    for m in _CCCD_CONTEXT_RE.finditer(text):
+        span = m.span(1)
+        if not _is_overlapping(span, occupied_spans):
+            occupied_spans.append(span)
+            entities.append({"type": "VN_CCCD", "start": span[0], "end": span[1]})
+
+    for m in _CCCD_RAW_RE.finditer(text):
+        span = m.span()
+        if not _is_overlapping(span, occupied_spans):
+            occupied_spans.append(span)
+            entities.append({"type": "VN_CCCD", "start": span[0], "end": span[1]})
+
+    # 4. VN_PHONE (có ngữ cảnh SĐT hoặc 10 chữ số bắt đầu bằng 0)
+    for m in _PHONE_CONTEXT_RE.finditer(text):
+        span = m.span(1)
+        if not _is_overlapping(span, occupied_spans):
+            occupied_spans.append(span)
+            entities.append({"type": "VN_PHONE", "start": span[0], "end": span[1]})
+
+    for m in _PHONE_RAW_RE.finditer(text):
+        span = m.span()
+        if not _is_overlapping(span, occupied_spans):
+            occupied_spans.append(span)
+            entities.append({"type": "VN_PHONE", "start": span[0], "end": span[1]})
+
+    entities.sort(key=lambda e: e["start"])
+    return entities
 
 
 def redact(text: str) -> str:
-    raise NotImplementedError("BƯỚC 3a: implement PII redaction")
+    """Thay thế các thực thể PII bằng [REDACTED_<TYPE>], thay từ cuối về đầu."""
+    detected = detect(text)
+    # Thay từ cuối văn bản về đầu để offset không bị lệch
+    for ent in reversed(detected):
+        placeholder = f"[REDACTED_{ent['type']}]"
+        text = text[:ent["start"]] + placeholder + text[ent["end"]:]
+    return text
