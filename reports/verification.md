@@ -1,5 +1,6 @@
 # Verification — Điền trước khi nộp
 
+- **Commit SHA cuối cùng:** `046b83a`
 - **OS / Python / Gitleaks version:**
   - OS: Windows 11 (PowerShell)
   - Python: 3.14.6 (chạy trong môi trường ảo `.venv`)
